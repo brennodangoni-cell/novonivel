@@ -1,10 +1,21 @@
 const formatter = new Intl.NumberFormat("pt-BR");
+const pageRoot = document.querySelector("#top");
+const player = document.querySelector("vturb-smartplayer");
 const counters = document.querySelectorAll("[data-count-to]");
 const checkoutButtons = document.querySelectorAll("[data-track-checkout]");
+const delayedBlocks = document.querySelectorAll(".esconder");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const vslDelaySeconds = Number(pageRoot?.dataset.vslDelaySeconds || 600);
+const delayStorageKey = `novoNivelVslUnlocked-${vslDelaySeconds}`;
 
 function setCounterValue(element, value) {
   element.textContent = formatter.format(Math.round(value));
+}
+
+function revealDelayedBlocks() {
+  delayedBlocks.forEach((block) => {
+    block.classList.remove("esconder");
+  });
 }
 
 function animateCounter(element) {
@@ -44,6 +55,22 @@ if (reduceMotion) {
   counters.forEach((counter) => observer.observe(counter));
 } else {
   counters.forEach(animateCounter);
+}
+
+if (localStorage.getItem(delayStorageKey) === "true") {
+  revealDelayedBlocks();
+} else if (player) {
+  player.addEventListener("player:ready", () => {
+    if (typeof player.displayHiddenElements === "function") {
+      player.displayHiddenElements(vslDelaySeconds, [".esconder"], { persist: true });
+      return;
+    }
+
+    window.setTimeout(() => {
+      revealDelayedBlocks();
+      localStorage.setItem(delayStorageKey, "true");
+    }, vslDelaySeconds * 1000);
+  });
 }
 
 checkoutButtons.forEach((button) => {
