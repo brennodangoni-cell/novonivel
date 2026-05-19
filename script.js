@@ -1,21 +1,34 @@
 const formatter = new Intl.NumberFormat("pt-BR");
-const pageRoot = document.querySelector("#top");
 const player = document.querySelector("vturb-smartplayer");
 const counters = document.querySelectorAll("[data-count-to]");
 const checkoutButtons = document.querySelectorAll("[data-track-checkout]");
 const delayedBlocks = document.querySelectorAll(".esconder");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const vslDelaySeconds = Number(pageRoot?.dataset.vslDelaySeconds || 600);
-const delayStorageKey = `novoNivelVslUnlocked-${vslDelaySeconds}`;
+const offerStorageKey = `novoNivelOfferUnlocked-${player?.id || "vsl"}`;
 
 function setCounterValue(element, value) {
   element.textContent = formatter.format(Math.round(value));
 }
 
-function revealDelayedBlocks() {
+function runCounter(counter) {
+  if (counter.dataset.animated === "true") return;
+
+  counter.dataset.animated = "true";
+  if (reduceMotion) {
+    setCounterValue(counter, Number(counter.dataset.countTo || 0));
+    return;
+  }
+
+  animateCounter(counter);
+}
+
+function revealDelayedBlocks({ persist = true } = {}) {
   delayedBlocks.forEach((block) => {
     block.classList.remove("esconder");
   });
+
+  counters.forEach(runCounter);
+  if (persist) localStorage.setItem(offerStorageKey, "true");
 }
 
 function animateCounter(element) {
@@ -36,16 +49,13 @@ function animateCounter(element) {
   requestAnimationFrame(tick);
 }
 
-if (reduceMotion) {
-  counters.forEach((counter) => setCounterValue(counter, Number(counter.dataset.countTo || 0)));
-} else if ("IntersectionObserver" in window) {
+if ("IntersectionObserver" in window) {
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
-        if (!entry.isIntersecting || entry.target.dataset.animated === "true") return;
+        if (!entry.isIntersecting) return;
 
-        entry.target.dataset.animated = "true";
-        animateCounter(entry.target);
+        runCounter(entry.target);
         observer.unobserve(entry.target);
       });
     },
@@ -53,25 +63,52 @@ if (reduceMotion) {
   );
 
   counters.forEach((counter) => observer.observe(counter));
-} else {
-  counters.forEach(animateCounter);
 }
 
-if (localStorage.getItem(delayStorageKey) === "true") {
+function findVideoElement(root) {
+  if (!root) return null;
+  if (root.matches?.("video")) return root;
+
+  const directVideo = root.querySelector?.("video");
+  if (directVideo) return directVideo;
+
+  const children = root.querySelectorAll?.("*") || [];
+  for (const child of children) {
+    const shadowVideo = findVideoElement(child.shadowRoot);
+    if (shadowVideo) return shadowVideo;
+  }
+
+  return null;
+}
+
+function bindNativeVideoEnd() {
+  const video = findVideoElement(player) || findVideoElement(document);
+  if (!video) return false;
+
+  video.addEventListener("ended", () => revealDelayedBlocks(), { once: true });
+  if (video.ended) revealDelayedBlocks();
+  return true;
+}
+
+if (localStorage.getItem(offerStorageKey) === "true") {
   revealDelayedBlocks();
 } else if (player) {
-  player.addEventListener("player:ready", () => {
-    if (typeof player.displayHiddenElements === "function") {
-      player.displayHiddenElements(vslDelaySeconds, [".esconder"], { persist: true });
-      return;
-    }
-
-    window.setTimeout(() => {
-      revealDelayedBlocks();
-      localStorage.setItem(delayStorageKey, "true");
-    }, vslDelaySeconds * 1000);
+  player.addEventListener("video:ended", () => revealDelayedBlocks(), { once: true });
+  player.addEventListener("ended", () => revealDelayedBlocks(), { once: true });
+  document.addEventListener("video:ended", (event) => {
+    const path = event.composedPath?.() || [];
+    if (event.target === player || path.includes(player)) revealDelayedBlocks();
   });
+  player.addEventListener("player:ready", bindNativeVideoEnd, { once: true });
+
+  const nativeVideoPoll = window.setInterval(() => {
+    if (bindNativeVideoEnd()) window.clearInterval(nativeVideoPoll);
+  }, 700);
+
+  window.setTimeout(() => window.clearInterval(nativeVideoPoll), 30000);
 }
+
+window.novoNivelLiberarOferta = revealDelayedBlocks;
 
 checkoutButtons.forEach((button) => {
   button.addEventListener("click", () => {
