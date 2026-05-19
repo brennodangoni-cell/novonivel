@@ -1,5 +1,6 @@
 const formatter = new Intl.NumberFormat("pt-BR");
 const counters = document.querySelectorAll("[data-count-to]");
+const checkoutButtons = document.querySelectorAll("[data-track-checkout]");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function setCounterValue(element, value) {
@@ -44,3 +45,10 @@ if (reduceMotion) {
 } else {
   counters.forEach(animateCounter);
 }
+
+checkoutButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (typeof window.fbq !== "function") return;
+    window.fbq("track", "InitiateCheckout");
+  });
+});
